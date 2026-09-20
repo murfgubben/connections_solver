@@ -32,12 +32,19 @@ class Word2VecEmbedding(EmbeddingModel):
 
     def __init__(self, model_dir: str | Path = "models") -> None:
         import gensim.downloader as api
+        from gensim.models import KeyedVectors
 
-        self.model_dir = Path(model_dir)
+        self.model_dir = Path(model_dir).resolve()
         self.model_dir.mkdir(parents=True, exist_ok=True)
         api.BASE_DIR = str(self.model_dir.resolve())
         LOGGER.info("Loading word2vec-google-news-300 (cached under %s)", self.model_dir)
-        self.model = api.load("word2vec-google-news-300")
+        # Load the binary directly after using gensim's downloader.  Some gensim
+        # versions generate a loader module with a stale absolute cache path;
+        # return_path avoids that module while retaining downloader caching.
+        model_path = Path(api.load("word2vec-google-news-300", return_path=True))
+        if not model_path.is_file():
+            raise RuntimeError(f"gensim downloaded model path does not exist: {model_path}")
+        self.model = KeyedVectors.load_word2vec_format(model_path, binary=True)
         self._vectors: dict[str, np.ndarray | None] = {}
 
     def _vector(self, word: str) -> np.ndarray | None:
